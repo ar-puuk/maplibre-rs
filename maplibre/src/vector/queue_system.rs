@@ -47,7 +47,8 @@ pub fn queue_system(MapContext { world, .. }: &mut MapContext) -> SystemResult {
                 source_shape: source_shape.clone(),
             });
 
-            if let Some(layer_entries) = buffer_pool_index.get_layers(source_shape.coords()) {
+            let sc = source_shape.coords();
+            if let Some(layer_entries) = buffer_pool_index.get_layers(sc) {
                 for layer_entry in layer_entries {
                     // Choose fill vs line pipeline based on layer type
                     let is_line = layer_entry.style_layer.type_ == "line";

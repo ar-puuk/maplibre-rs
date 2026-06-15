@@ -192,7 +192,18 @@ impl Shader for FillShader {
             entry_point: "main",
             targets: vec![Some(wgpu::ColorTargetState {
                 format: self.format,
-                blend: None,
+                blend: Some(wgpu::BlendState {
+                    color: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::SrcAlpha,
+                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    alpha: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::One,
+                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                }),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
         }

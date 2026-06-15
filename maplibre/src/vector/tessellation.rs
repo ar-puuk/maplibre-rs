@@ -193,7 +193,6 @@ impl<I: std::ops::Add + From<lyon::tessellation::VertexId> + MaxIndex> ZeroTesse
 
     fn tessellate_fill(&mut self) {
         let path_builder = self.path_builder.replace(Path::builder());
-
         if let Err(e) = FillTessellator::new().tessellate_path(
             &path_builder.build(),
             &FillOptions::tolerance(DEFAULT_TOLERANCE).with_fill_rule(FillRule::NonZero),

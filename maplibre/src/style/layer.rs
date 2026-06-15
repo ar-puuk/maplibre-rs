@@ -113,8 +113,12 @@ impl<T: std::str::FromStr + Clone> StyleProperty<T> {
                 return Ok(Some(StyleProperty::Constant(color)));
             }
         }
-        // If it's a structural generic expression like match arrays
+        // Array expression (MapLibre GL JS v2 style)
         if v.is_array() {
+            return Ok(Some(StyleProperty::Expression(v)));
+        }
+        // Legacy stops object: {"stops": [[zoom, color], ...], "base": ...}
+        if v.is_object() {
             return Ok(Some(StyleProperty::Expression(v)));
         }
         Ok(None)
@@ -202,6 +206,28 @@ impl StyleProperty<csscolorparser::Color> {
         match self {
             StyleProperty::Constant(c) => return Some(c.clone()),
             StyleProperty::Expression(expr) => {
+                // Legacy stops object format: {"stops": [[z0, color0], [z1, color1], ...]}
+                if let Some(stops_arr) = expr.get("stops").and_then(|s| s.as_array()) {
+                    // Start with the color of the first stop as default
+                    let mut result: Option<csscolorparser::Color> = stops_arr.first()
+                        .and_then(|s| s.as_array())
+                        .and_then(|a| a.get(1))
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.parse().ok());
+                    for stop in stops_arr {
+                        let Some(stop_arr) = stop.as_array() else { continue };
+                        let Some(stop_z) = stop_arr.first().and_then(|v| v.as_f64()) else { continue };
+                        if zoom as f64 >= stop_z {
+                            if let Some(s) = stop_arr.get(1).and_then(|v| v.as_str()) {
+                                if let Ok(c) = s.parse::<csscolorparser::Color>() {
+                                    result = Some(c);
+                                }
+                            }
+                        }
+                    }
+                    return result;
+                }
+
                 let arr = match expr.as_array() {
                     Some(a) => a,
                     None => return self.evaluate(feature_properties),
