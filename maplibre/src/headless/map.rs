@@ -114,6 +114,101 @@ impl HeadlessMap {
         pool.clear();
     }
 
+    /// Mutable access to the MapContext (view_state, world, renderer).
+    pub fn map_context_mut(&mut self) -> &mut MapContext {
+        &mut self.map_context
+    }
+
+    /// Run the render schedule exactly once without clearing tiles or buffer pool.
+    /// Used by the full-scene rendering path.
+    pub fn run_once(&mut self) {
+        self.schedule
+            .run(&mut self.map_context)
+            .expect("schedule must not error");
+    }
+
+    /// Clear tile ECS storage and GPU buffer pool — call after `run_once` if needed.
+    pub fn clear_tile_buffers(&mut self) {
+        let context = &mut self.map_context;
+        context.world.tiles.clear();
+        let pool = context
+            .world
+            .resources
+            .query_mut::<&mut Eventually<VectorBufferPool>>()
+            .expect("VectorBufferPool not found")
+            .expect_initialized_mut("VectorBufferPool not initialized");
+        pool.clear();
+    }
+
+    /// Like `process_tile` but tessellates at the given actual `WorldTileCoords`
+    /// instead of always using `(0,0,0)`.  Use this with `spawn_tile_at` for
+    /// seamless full-scene rendering.
+    pub async fn process_tile_at(
+        &self,
+        tile_data: Box<[u8]>,
+        layer: &StyleLayer,
+        coords: WorldTileCoords,
+    ) -> Vec<Box<<DefaultVectorTransferables as VectorTransferables>::LayerTessellated>> {
+        let context = HeadlessContext::default();
+        let mut processor =
+            ProcessVectorContext::<DefaultVectorTransferables, HeadlessContext>::new(context);
+
+        process_vector_tile(
+            &tile_data,
+            VectorTileRequest {
+                coords,
+                layers: [layer].into_iter().cloned().collect(),
+            },
+            &mut processor,
+        )
+        .expect("Failed to process!");
+
+        let messages = processor.take_context().messages.deref().take();
+        messages
+            .into_iter()
+            .filter(|message| {
+                message.tag()
+                    == <DefaultVectorTransferables as VectorTransferables>::LayerTessellated::message_tag()
+            })
+            .map(|message| {
+                message.into_transferable::<
+                    <DefaultVectorTransferables as VectorTransferables>::LayerTessellated,
+                >()
+            })
+            .collect()
+    }
+
+    /// Insert pre-tessellated layers into the tile ECS at `coords`.
+    /// Must be called before `run_once` for each tile you want in the scene.
+    pub fn spawn_tile_at(
+        &mut self,
+        coords: WorldTileCoords,
+        layers: Vec<Box<<DefaultVectorTransferables as VectorTransferables>::LayerTessellated>>,
+    ) {
+        let context = &mut self.map_context;
+        context
+            .world
+            .tiles
+            .spawn_mut(coords)
+            .expect("unable to spawn tile")
+            .insert(VectorLayerBucketComponent {
+                done: true,
+                layers: layers
+                    .into_iter()
+                    .map(|layer| {
+                        VectorLayerBucket::AvailableLayer(AvailableVectorLayerBucket {
+                            coords: layer.coords,
+                            source_layer: layer.layer_data.name,
+                            style_layer_id: layer.style_layer_id,
+                            buffer: layer.buffer,
+                            feature_indices: layer.feature_indices,
+                            feature_colors: layer.feature_colors,
+                        })
+                    })
+                    .collect::<Vec<_>>(),
+            });
+    }
+
     pub async fn fetch_tile(&self, coords: WorldTileCoords) -> Result<Box<[u8]>, SourceFetchError> {
         let source_client = self.kernel.source_client();
         let data = source_client
