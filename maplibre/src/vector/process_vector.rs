@@ -201,6 +201,7 @@ pub fn process_vector_tile<T: VectorTransferables, C: Context>(
                 match paint {
                     LayerPaint::Line(_) | LayerPaint::Fill(_) => {
                         let mut tessellator = ZeroTessellator::<IndexDataType>::default();
+                        tessellator.zoom = u8::from(coords.z) as f32;
                         match paint {
                             LayerPaint::Fill(p) => {
                                 tessellator.style_property = p.fill_color.clone()

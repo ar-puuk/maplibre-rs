@@ -136,6 +136,8 @@ pub struct ZeroTessellator<I: std::ops::Add + From<lyon::tessellation::VertexId>
     /// When true, polygon geometry is tessellated as strokes (outlines) instead of fills.
     /// This is used when a line-type style layer references polygon source geometry.
     pub is_line_layer: bool,
+    /// Tile zoom level, used for zoom-dependent color expression evaluation.
+    pub zoom: f32,
     current_index: usize,
 }
 
@@ -149,9 +151,10 @@ impl<I: std::ops::Add + From<lyon::tessellation::VertexId> + MaxIndex> Default
             feature_indices: Vec::new(),
             feature_properties: HashMap::new(),
             feature_colors: Vec::new(),
-            fallback_color: [0.0, 0.0, 0.0, 1.0],
+            fallback_color: [0.0, 0.0, 0.0, 0.0],
             style_property: None,
             is_line_layer: false,
+            zoom: 0.0,
             current_index: 0,
             path_open: false,
             is_point: false,
@@ -328,7 +331,7 @@ impl<I: std::ops::Add + From<lyon::tessellation::VertexId> + MaxIndex> FeaturePr
     fn feature_end(&mut self, _idx: u64) -> geozero::error::Result<()> {
         self.update_feature_indices();
         let color = if let Some(style) = &self.style_property {
-            if let Some(c) = style.evaluate(&self.feature_properties) {
+            if let Some(c) = style.evaluate_color_at_zoom(&self.feature_properties, self.zoom) {
                 [c.r as f32, c.g as f32, c.b as f32, c.a as f32]
             } else {
                 tracing::debug!(
