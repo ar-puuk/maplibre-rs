@@ -149,19 +149,34 @@ impl HeadlessMap {
         layer: &StyleLayer,
         coords: WorldTileCoords,
     ) -> Vec<Box<<DefaultVectorTransferables as VectorTransferables>::LayerTessellated>> {
-        let context = HeadlessContext::default();
-        let mut processor =
-            ProcessVectorContext::<DefaultVectorTransferables, HeadlessContext>::new(context);
+        let layer_clone = layer.clone();
+        // geozero may panic on certain tile geometries (assertion in geo_types_writer).
+        // Catch panics so a single bad tile does not abort the whole render.
+        let processor = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let context = HeadlessContext::default();
+            let mut processor =
+                ProcessVectorContext::<DefaultVectorTransferables, HeadlessContext>::new(context);
+            let _ = process_vector_tile(
+                &tile_data,
+                VectorTileRequest {
+                    coords,
+                    layers: [&layer_clone].into_iter().cloned().collect(),
+                },
+                &mut processor,
+            );
+            processor
+        }));
 
-        process_vector_tile(
-            &tile_data,
-            VectorTileRequest {
-                coords,
-                layers: [layer].into_iter().cloned().collect(),
-            },
-            &mut processor,
-        )
-        .expect("Failed to process!");
+        let processor = match processor {
+            Ok(p) => p,
+            Err(_) => {
+                log::warn!(
+                    "process_tile_at: tessellation panicked for tile {:?} — skipping",
+                    coords
+                );
+                return vec![];
+            }
+        };
 
         let messages = processor.take_context().messages.deref().take();
         messages
