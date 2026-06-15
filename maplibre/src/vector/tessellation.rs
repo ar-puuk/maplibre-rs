@@ -175,13 +175,13 @@ impl<I: std::ops::Add + From<lyon::tessellation::VertexId> + MaxIndex> ZeroTesse
     fn tessellate_strokes(&mut self) {
         let path_builder = self.path_builder.replace(Path::builder());
 
-        StrokeTessellator::new()
-            .tessellate_path(
-                &path_builder.build(),
-                &StrokeOptions::tolerance(DEFAULT_TOLERANCE),
-                &mut BuffersBuilder::new(&mut self.buffer, VertexConstructor {}),
-            )
-            .unwrap(); // TODO: Remove unwrap
+        if let Err(e) = StrokeTessellator::new().tessellate_path(
+            &path_builder.build(),
+            &StrokeOptions::tolerance(DEFAULT_TOLERANCE),
+            &mut BuffersBuilder::new(&mut self.buffer, VertexConstructor {}),
+        ) {
+            log::warn!("stroke tessellation failed, skipping feature: {:?}", e);
+        }
     }
 
     fn end(&mut self, close: bool) {
@@ -194,13 +194,13 @@ impl<I: std::ops::Add + From<lyon::tessellation::VertexId> + MaxIndex> ZeroTesse
     fn tessellate_fill(&mut self) {
         let path_builder = self.path_builder.replace(Path::builder());
 
-        FillTessellator::new()
-            .tessellate_path(
-                &path_builder.build(),
-                &FillOptions::tolerance(DEFAULT_TOLERANCE).with_fill_rule(FillRule::NonZero),
-                &mut BuffersBuilder::new(&mut self.buffer, VertexConstructor {}),
-            )
-            .unwrap(); // TODO: Remove unwrap
+        if let Err(e) = FillTessellator::new().tessellate_path(
+            &path_builder.build(),
+            &FillOptions::tolerance(DEFAULT_TOLERANCE).with_fill_rule(FillRule::NonZero),
+            &mut BuffersBuilder::new(&mut self.buffer, VertexConstructor {}),
+        ) {
+            log::warn!("fill tessellation failed, skipping feature: {:?}", e);
+        }
     }
 }
 
